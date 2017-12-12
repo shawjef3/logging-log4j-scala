@@ -292,7 +292,7 @@ private object LoggerMacro {
         if (message.splice.isInstanceOf[ReusableMessage] &&
           message.splice.getSource == null
         ) {
-          message.asInstanceOf[ReusableMessage].swapSource(getSourceLocation(c).splice)
+          message.splice.asInstanceOf[ReusableMessage].swapSource(getSourceLocation(c).splice)
         }
         c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
       }
