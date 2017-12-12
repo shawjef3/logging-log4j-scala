@@ -16,10 +16,9 @@
  */
 package org.apache.logging.log4j.scala
 
-import org.apache.logging.log4j.message.{EntryMessage, Message, MessageFactory2}
+import org.apache.logging.log4j.message.{EntryMessage, Message, MessageFactory2, SourceLocation}
 import org.apache.logging.log4j.spi.ExtendedLogger
 import org.apache.logging.log4j.{Level, LogManager, Marker}
-
 import scala.language.experimental.macros
 
 /**
@@ -585,7 +584,7 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
     * @param message message
     * @param cause   cause or `null`
     */
-  def logMessage(level: Level, marker: Marker, message: AnyRef, cause: Throwable): Unit = {
+  def logMessage(level: Level, marker: Marker, message: AnyRef, location: SourceLocation, cause: Throwable): Unit = {
     delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(message), cause)
   }
 

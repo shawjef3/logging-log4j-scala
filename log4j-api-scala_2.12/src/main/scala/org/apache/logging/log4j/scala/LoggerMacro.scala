@@ -16,10 +16,9 @@
  */
 package org.apache.logging.log4j.scala
 
-import org.apache.logging.log4j.message.{EntryMessage, Message}
+import org.apache.logging.log4j.message.{EntryMessage, Message, ReusableMessage, SourceLocation}
 import org.apache.logging.log4j.spi.AbstractLogger
 import org.apache.logging.log4j.{Level, Marker}
-
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 
@@ -30,6 +29,19 @@ private object LoggerMacro {
 
   type LoggerContext = blackbox.Context { type PrefixType = Logger }
 
+  def getSourceLocation(c: LoggerContext): c.Expr[SourceLocation] = {
+    val term = c.internal.enclosingOwner.asTerm match {
+      case t if t.owner.isMethod => t.owner
+      case t => t
+    }
+    import c.universe._
+
+    val className = c.Expr(Literal(Constant(term.owner.fullName)))
+    val methodName = c.Expr(Literal(Constant(if (term.isMethod) term.asMethod.name.decodedName.toString else null)))
+    val fileName = c.Expr(Literal(Constant(c.enclosingPosition.pos.source.file.name)))
+    val line = c.Expr(Literal(Constant(c.enclosingPosition.line)))
+    c.universe.reify(new SourceLocation(className.splice, methodName.splice, fileName.splice, line.splice))
+  }
 
   def fatalMarkerMsg(c: LoggerContext)(marker: c.Expr[Marker], message: c.Expr[Message]) =
     logMarkerMsg(c)(c.universe.reify(Level.FATAL), marker, message)
@@ -263,20 +275,25 @@ private object LoggerMacro {
   def logMarkerCseq(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[CharSequence]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, null)
       }
     )
 
   def logMarkerObject(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[AnyRef]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, null)
       }
     )
 
   def logMarkerMsgThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[Message], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
+        if (message.splice.isInstanceOf[ReusableMessage] &&
+          message.splice.getSource == null
+        ) {
+          message.asInstanceOf[ReusableMessage].swapSource(getSourceLocation(c).splice)
+        }
         c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
       }
     )
@@ -284,56 +301,58 @@ private object LoggerMacro {
   def logMarkerCseqThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[CharSequence], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, cause.splice)
       }
     )
 
   def logMarkerObjectThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[AnyRef], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, cause.splice)
       }
     )
 
   def logMsg(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[Message]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, null)
       }
     )
 
-  def logCseq(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence]) =
+  def logCseq(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence]) = {
+    val source = getSourceLocation(c)
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, source.splice, null)
       }
     )
+  }
 
   def logObject(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[AnyRef]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, null)
       }
     )
 
   def logMsgThrowable(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[Message], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, cause.splice)
       }
     )
 
   def logCseqThrowable(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, cause.splice)
       }
     )
 
   def logObjectThrowable(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[AnyRef], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, cause.splice)
       }
     )
 
