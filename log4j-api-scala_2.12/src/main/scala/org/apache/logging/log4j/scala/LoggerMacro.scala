@@ -268,7 +268,7 @@ private object LoggerMacro {
   def logMarkerMsg(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[Message]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, null)
       }
     )
 
@@ -289,12 +289,7 @@ private object LoggerMacro {
   def logMarkerMsgThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[Message], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        if (message.splice.isInstanceOf[ReusableMessage] &&
-          message.splice.getSource == null
-        ) {
-          message.splice.asInstanceOf[ReusableMessage].swapSource(getSourceLocation(c).splice)
-        }
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, cause.splice)
       }
     )
 
@@ -319,14 +314,12 @@ private object LoggerMacro {
       }
     )
 
-  def logCseq(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence]) = {
-    val source = getSourceLocation(c)
+  def logCseq(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, source.splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, null)
       }
     )
-  }
 
   def logObject(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[AnyRef]) =
     c.universe.reify(
@@ -359,7 +352,7 @@ private object LoggerMacro {
 
   def traceEntry(c: LoggerContext)(): c.Expr[EntryMessage] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceEntry()
+      c.prefix.splice.delegate.traceEntry(getSourceLocation(c).splice)
     )
 
   def traceEntryParams(c: LoggerContext)(params: c.Expr[AnyRef]*): c.Expr[EntryMessage] = {
@@ -376,7 +369,7 @@ private object LoggerMacro {
 
     val log = Apply(
       Select(Select(c.prefix.tree, TermName("delegate")), TermName("traceEntry")),
-      reify(null: String).tree :: (params map (_.tree)).toList
+      reify(null: String).tree :: getSourceLocation(c).tree :: (params map (_.tree)).toList
     )
     c.Expr[EntryMessage](If(isEnabled, log, reify(null).tree))
   }
@@ -385,7 +378,7 @@ private object LoggerMacro {
   def traceEntryMessage(c: LoggerContext)(message: c.Expr[Message]): c.Expr[EntryMessage] =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null: AnyRef, null)) {
-        c.prefix.splice.delegate.traceEntry(message.splice)  // TODO should not do ifEnabled check
+        c.prefix.splice.delegate.traceEntry(getSourceLocation(c).splice, message.splice)  // TODO should not do ifEnabled check
       } else {
         null
       }
@@ -393,29 +386,29 @@ private object LoggerMacro {
 
   def traceExit(c: LoggerContext)(): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit()
+      c.prefix.splice.delegate.traceExit(getSourceLocation(c).splice)
     )
 
   def traceExitResult[R: c.WeakTypeTag](c: LoggerContext)(result: c.Expr[R]): c.Expr[R] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit(result.splice)
+      c.prefix.splice.delegate.traceExit(getSourceLocation(c).splice, result.splice)
     )
 
   def traceExitEntryMessage(c: LoggerContext)(entryMessage: c.Expr[EntryMessage]): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit(entryMessage.splice)
+      c.prefix.splice.delegate.traceExit(getSourceLocation(c).splice, entryMessage.splice)
     )
 
   def traceExitEntryMessageResult[R: c.WeakTypeTag](c: LoggerContext)(entryMessage: c.Expr[EntryMessage], result: c.Expr[R]): c.Expr[R] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit(entryMessage.splice, result.splice)
+      c.prefix.splice.delegate.traceExit(getSourceLocation(c).splice, entryMessage.splice, result.splice)
     )
 
   def traceExitMessageResult[R: c.WeakTypeTag](c: LoggerContext)(message: c.Expr[Message], result: c.Expr[R]): c.Expr[R] =
     c.universe.reify(
       {
         if (message.splice != null && c.prefix.splice.delegate.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, message.splice, null)) {
-          c.prefix.splice.delegate.traceExit(message.splice, result.splice)  // TODO should not do ifEnabled check
+          c.prefix.splice.delegate.traceExit(getSourceLocation(c).splice, message.splice, result.splice)  // TODO should not do ifEnabled check
         }
         result.splice
       }
@@ -423,22 +416,22 @@ private object LoggerMacro {
 
   def throwing[T <: Throwable: c.WeakTypeTag](c: LoggerContext)(t: c.Expr[T]): c.Expr[T] =
     c.universe.reify(
-      c.prefix.splice.delegate.throwing(t.splice)
+      c.prefix.splice.delegate.throwing(getSourceLocation(c).splice, t.splice)
     )
 
   def throwingLevel[T <: Throwable: c.WeakTypeTag](c: LoggerContext)(level: c.Expr[Level], t: c.Expr[T]): c.Expr[T] =
     c.universe.reify(
-      c.prefix.splice.delegate.throwing(level.splice, t.splice)
+      c.prefix.splice.delegate.throwing(getSourceLocation(c).splice, level.splice, t.splice)
     )
 
   def catching(c: LoggerContext)(t: c.Expr[Throwable]): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.catching(t.splice)
+      c.prefix.splice.delegate.catching(getSourceLocation(c).splice, t.splice)
     )
 
   def catchingLevel(c: LoggerContext)(level: c.Expr[Level], t: c.Expr[Throwable]): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.catching(level.splice, t.splice)
+      c.prefix.splice.delegate.catching(getSourceLocation(c).splice, level.splice, t.splice)
     )
 
 }

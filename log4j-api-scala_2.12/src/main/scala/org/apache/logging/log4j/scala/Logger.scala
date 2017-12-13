@@ -545,7 +545,6 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
   def catching(level: Level, t: Throwable): Unit =
   macro LoggerMacro.catchingLevel
 
-
   /** Always logs a message at the specified level. It is the responsibility of the caller to ensure the specified
     * level is enabled.
     *
@@ -556,22 +555,8 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
     * @param message message
     * @param cause   cause or `null`
     */
-  def logMessage(level: Level, marker: Marker, message: Message, cause: Throwable): Unit = {
-    delegate.logMessage(Logger.FQCN, level, marker, message, cause)
-  }
-
-  /** Always logs a message at the specified level. It is the responsibility of the caller to ensure the specified
-    * level is enabled.
-    *
-    * Should normally not be used directly from application code, but needs to be public for access by macros.
-    *
-    * @param level   log level
-    * @param marker  marker or `null`
-    * @param message message
-    * @param cause   cause or `null`
-    */
-  def logMessage(level: Level, marker: Marker, message: CharSequence, cause: Throwable): Unit = {
-    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(message), cause)
+  def logMessage(level: Level, marker: Marker, message: CharSequence, location: SourceLocation, cause: Throwable): Unit = {
+    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(location, message), cause)
   }
 
   /** Always logs a message at the specified level. It is the responsibility of the caller to ensure the specified
@@ -585,7 +570,7 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
     * @param cause   cause or `null`
     */
   def logMessage(level: Level, marker: Marker, message: AnyRef, location: SourceLocation, cause: Throwable): Unit = {
-    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(message), cause)
+    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(location, message), cause)
   }
 
 }
