@@ -16,16 +16,17 @@
  */
 package org.apache.logging.log4j.scala
 
-import org.apache.logging.log4j.message.{DefaultFlowMessageFactory, Message, ParameterizedMessage, ParameterizedMessageFactory}
+import java.util.Objects
+import org.apache.logging.log4j.message._
 import org.apache.logging.log4j.spi.{AbstractLogger, ExtendedLogger}
 import org.apache.logging.log4j.{Level, Marker, MarkerManager}
+import org.hamcrest.{BaseMatcher, Description}
 import org.junit.runner.RunWith
-import org.mockito.Matchers.{any, anyString, eq => eqv}
+import org.mockito.Matchers.{any, anyString, argThat, isNull, notNull, eq => eqv}
 import org.mockito.Mockito._
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{FunSuite, Matchers}
-
 import scala.language.reflectiveCalls  // needed for Mockito mocking
 
 case class Custom(i: Int)
@@ -58,6 +59,27 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
         mockManager
       }
     }
+
+  def messageMatcher: Message =
+    argThat(
+      new BaseMatcher[Message] {
+        override def matches(item: scala.Any): Boolean = {
+          item match {
+            case otherMessage: Message
+              if Objects.equals(msg.getFormat, otherMessage.getFormat) &&
+                Objects.equals(msg.getParameters, otherMessage.getParameters) &&
+                Objects.equals(msg.getThrowable, otherMessage.getThrowable) &&
+                otherMessage.getSource != null =>
+              true
+            case _ =>
+              false
+          }
+        }
+
+        override def describeTo(description: Description): Unit =
+          description.appendText(msg.toString)
+      }
+    )
 
   test("fatal enabled with String message") {
     val f = fixture
@@ -438,7 +460,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceEntry()
-    verify(f.mockLogger).traceEntry()
+    verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]))
   }
 
   test("traceEntry enabled with params") {
@@ -446,7 +468,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceEntry("foo", "bar")
-    verify(f.mockLogger).traceEntry(null: String, "foo", "bar")
+    verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]), isNull(classOf[String]), eqv("foo"), eqv("bar"))
   }
 
   test("traceEntry disabled with params") {
@@ -454,7 +476,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(false)
     val logger = Logger(f.mockLogger)
     logger.traceEntry("foo", "bar")
-    verify(f.mockLogger, never).traceEntry(anyString(), anyString(), anyString())
+    verify(f.mockLogger, never).traceEntry(notNull(classOf[SourceLocation]), isNull(classOf[String]), eqv("foo"), eqv("bar"))
   }
 
   test("traceEntry enabled with message") {
@@ -462,7 +484,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceEntry(msg)
-    verify(f.mockLogger).traceEntry(eqv(msg))
+    verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]), eqv(msg))
   }
 
   test("traceEntry disabled with message") {
@@ -470,7 +492,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(false)
     val logger = Logger(f.mockLogger)
     logger.traceEntry(msg)
-    verify(f.mockLogger, never).traceEntry(any[Message])
+    verify(f.mockLogger, never).traceEntry(notNull(classOf[SourceLocation]), eqv(msg))
   }
 
   test("traceExit") {
@@ -478,7 +500,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit()
-    verify(f.mockLogger).traceExit()
+    verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]))
   }
 
   test("traceExit with result") {
@@ -486,7 +508,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(result)
-    verify(f.mockLogger).traceExit(result)
+    verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]), eqv(result))
   }
 
   test("traceExit with entrymessage") {
@@ -494,7 +516,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(entryMsg)
-    verify(f.mockLogger).traceExit(entryMsg)
+    verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]), eqv(entryMsg))
   }
 
   test("traceExit with entrymessage and result") {
@@ -502,7 +524,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(entryMsg, result)
-    verify(f.mockLogger).traceExit(entryMsg, result)
+    verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]), eqv(entryMsg), eqv(result))
   }
 
   test("traceExit enabled with message") {
@@ -510,7 +532,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(msg, result)
-    verify(f.mockLogger).traceExit(eqv(msg), eqv(result))
+    verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]), eqv(msg), eqv(result))
   }
 
   test("traceExit disabled with message") {
@@ -518,35 +540,35 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(false)
     val logger = Logger(f.mockLogger)
     logger.traceExit(msg, result)
-    verify(f.mockLogger, never).traceExit(any[Message], any[AnyRef])
+    verify(f.mockLogger, never).traceExit(notNull(classOf[SourceLocation]), eqv(msg), eqv(result))
   }
 
   test("throwing") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.throwing(cause)
-    verify(f.mockLogger).throwing(eqv(cause))
+    verify(f.mockLogger).throwing(notNull(classOf[SourceLocation]), eqv(cause))
   }
 
   test("throwing with level") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.throwing(Level.INFO, cause)
-    verify(f.mockLogger).throwing(eqv(Level.INFO), eqv(cause))
+    verify(f.mockLogger).throwing(notNull(classOf[SourceLocation]), eqv(Level.INFO), eqv(cause))
   }
 
   test("catching") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.catching(cause)
-    verify(f.mockLogger).catching(eqv(cause))
+    verify(f.mockLogger).catching(notNull(classOf[SourceLocation]), eqv(cause))
   }
 
   test("catching with level") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.catching(Level.INFO, cause)
-    verify(f.mockLogger).catching(eqv(Level.INFO), eqv(cause))
+    verify(f.mockLogger).catching(notNull(classOf[SourceLocation]), eqv(Level.INFO), eqv(cause))
   }
 
 }

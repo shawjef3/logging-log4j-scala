@@ -63,6 +63,9 @@ object Logger {
   */
 class Logger private(val delegate: ExtendedLogger) extends AnyVal {
 
+  def traced[A](level: Level)(f: => A): A =
+  macro LoggerMacro.traced[A]
+
   def fatal(marker: Marker, message: Message): Unit =
   macro LoggerMacro.fatalMarkerMsg
 
@@ -544,6 +547,21 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
     */
   def catching(level: Level, t: Throwable): Unit =
   macro LoggerMacro.catchingLevel
+
+
+  /** Always logs a message at the specified level. It is the responsibility of the caller to ensure the specified
+    * level is enabled.
+    *
+    * Should normally not be used directly from application code, but needs to be public for access by macros.
+    *
+    * @param level   log level
+    * @param marker  marker or `null`
+    * @param message message
+    * @param cause   cause or `null`
+    */
+  def logMessage(level: Level, marker: Marker, message: Message, cause: Throwable): Unit = {
+    delegate.logMessage(Logger.FQCN, level, marker, message, cause)
+  }
 
   /** Always logs a message at the specified level. It is the responsibility of the caller to ensure the specified
     * level is enabled.

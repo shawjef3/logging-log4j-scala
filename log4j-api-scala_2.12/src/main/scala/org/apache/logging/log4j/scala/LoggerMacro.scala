@@ -16,7 +16,7 @@
  */
 package org.apache.logging.log4j.scala
 
-import org.apache.logging.log4j.message.{EntryMessage, Message, ReusableMessage, SourceLocation}
+import org.apache.logging.log4j.message.{EntryMessage, Message, SourceLocation}
 import org.apache.logging.log4j.spi.AbstractLogger
 import org.apache.logging.log4j.{Level, Marker}
 import scala.language.experimental.macros
@@ -41,6 +41,33 @@ private object LoggerMacro {
     val fileName = c.Expr(Literal(Constant(c.enclosingPosition.pos.source.file.name)))
     val line = c.Expr(Literal(Constant(c.enclosingPosition.line)))
     c.universe.reify(new SourceLocation(className.splice, methodName.splice, fileName.splice, line.splice))
+  }
+
+  def traced[A](c: LoggerContext)(level: c.Expr[Level])(f: c.Expr[A]) = {
+    val (term, params) = c.internal.enclosingOwner.asTerm match {
+      case t if t.owner.isMethod => (t.owner, t.owner.asMethod.paramLists)
+      case t => (t, List.empty)
+    }
+    import c.universe._
+
+    val delegate = Select(c.prefix.tree, TermName("delegate"))
+    val entry = Select(delegate, TermName("traceEntry"))
+    val exit = Select(delegate, TermName("traceExit"))
+    val throwing = Select(delegate, TermName("throwing"))
+
+    //TODO: log params
+    q"""
+       val location = ${getSourceLocation(c)}
+       val entry = $entry(location, null: String)
+       try {
+         val result = $f
+         $exit(location, entry, result)
+       } catch {
+         case scala.util.control.NonFatal(e) =>
+           $throwing(location, $level, e)
+           throw e
+       }
+     """
   }
 
   def fatalMarkerMsg(c: LoggerContext)(marker: c.Expr[Marker], message: c.Expr[Message]) =
@@ -268,7 +295,7 @@ private object LoggerMacro {
   def logMarkerMsg(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[Message]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, null)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, null)
       }
     )
 
@@ -289,7 +316,7 @@ private object LoggerMacro {
   def logMarkerMsgThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[Message], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getSourceLocation(c).splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
       }
     )
 
@@ -310,7 +337,7 @@ private object LoggerMacro {
   def logMsg(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[Message]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, null)
       }
     )
 
@@ -331,7 +358,7 @@ private object LoggerMacro {
   def logMsgThrowable(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[Message], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, getSourceLocation(c).splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, cause.splice)
       }
     )
 
@@ -367,9 +394,10 @@ private object LoggerMacro {
       )
     )
 
+
     val log = Apply(
       Select(Select(c.prefix.tree, TermName("delegate")), TermName("traceEntry")),
-      reify(null: String).tree :: getSourceLocation(c).tree :: (params map (_.tree)).toList
+      getSourceLocation(c).tree :: reify(null: String).tree :: (params map (_.tree)).toList
     )
     c.Expr[EntryMessage](If(isEnabled, log, reify(null).tree))
   }
