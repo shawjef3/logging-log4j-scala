@@ -44,30 +44,18 @@ private object LoggerMacro {
   }
 
   def traced[A](c: LoggerContext)(level: c.Expr[Level])(f: c.Expr[A]) = {
-    val (term, params) = c.internal.enclosingOwner.asTerm match {
-      case t if t.owner.isMethod => (t.owner, t.owner.asMethod.paramLists)
-      case t => (t, List.empty)
-    }
-    import c.universe._
-
-    val delegate = Select(c.prefix.tree, TermName("delegate"))
-    val entry = Select(delegate, TermName("traceEntry"))
-    val exit = Select(delegate, TermName("traceExit"))
-    val throwing = Select(delegate, TermName("throwing"))
-
     //TODO: log params
-    q"""
-       val location = ${getSourceLocation(c)}
-       val entry = $entry(location, null: String)
-       try {
-         val result = $f
-         $exit(location, entry, result)
-       } catch {
-         case scala.util.control.NonFatal(e) =>
-           $throwing(location, $level, e)
-           throw e
-       }
-     """
+    c.universe.reify {
+      val location = getSourceLocation(c).splice
+      val entry = c.prefix.splice.delegate.traceEntry(location, null: String)
+      try {
+        c.prefix.splice.delegate.traceExit(location, entry, f.splice)
+      } catch {
+        case scala.util.control.NonFatal(e) =>
+          c.prefix.splice.delegate.throwing(location, level.splice, e)
+          throw e
+      }
+    }
   }
 
   def fatalMarkerMsg(c: LoggerContext)(marker: c.Expr[Marker], message: c.Expr[Message]) =
