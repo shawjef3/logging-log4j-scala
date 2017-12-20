@@ -63,6 +63,13 @@ object Logger {
   */
 class Logger private(val delegate: ExtendedLogger) extends AnyVal {
 
+  /**
+    *
+    * @param level is the level used to log exceptions
+    * @param f is the method body to trace
+    * @tparam A
+    * @return the value returned by `f`
+    */
   def traced[A](level: Level)(f: => A): A =
   macro LoggerMacro.traced[A]
 
