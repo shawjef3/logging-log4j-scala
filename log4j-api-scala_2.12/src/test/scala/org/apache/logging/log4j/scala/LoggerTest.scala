@@ -574,8 +574,10 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
   test("traced without exception") {
     def f = fixture
     val logger = Logger(f.mockLogger)
-    def example(): Unit = logger.traced(Level.INFO)(3)
-    example()
+    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null: String)).thenReturn(true)
+    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, null: EntryMessage/*not null, how to fix?*/, null)).thenReturn(true)
+    def example(): Int = logger.traced(Level.INFO)(3)
+    assertResult(3)(example())
     verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]), eqv(null: String))
     verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]), notNull(classOf[EntryMessage]), eqv(3))
   }
@@ -583,9 +585,10 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
   test("traced with exception") {
     def f = fixture
     val logger = Logger(f.mockLogger)
-    when(f.mockLogger.isEnabled(Level.INFO)).thenReturn(true)
+    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null: String)).thenReturn(true)
+    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.THROWING_MARKER, null: Any, null)).thenReturn(true)
     def example(): Unit = logger.traced(Level.INFO)(throw new Exception())
-    util.Try(example())
+    intercept[Exception](example())
     verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]), eqv(null: String))
     verify(f.mockLogger).catching(notNull(classOf[SourceLocation]), notNull(classOf[Exception]))
   }
