@@ -572,27 +572,87 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
   }
 
   test("traced without exception") {
-    def f = fixture
-    val logger = Logger(f.mockLogger)
-    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null: String)).thenReturn(true)
-    when(f.mockLogger.isEnabled(eqv(Level.TRACE), eqv(AbstractLogger.EXIT_MARKER), notNull(classOf[EntryMessage]), eqv(null))).thenReturn(true)
-    when(f.mockLogger.traceExit(notNull(classOf[SourceLocation]), notNull(classOf[EntryMessage]), eqv(3))).thenReturn(3)
+    val testLogger = new TestLogger
+    val logger = Logger(testLogger)
     def example(): Int = logger.traced(Level.INFO)(3)
     val result = example()
-    verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]), eqv(null: String))
-    verify(f.mockLogger).traceExit(notNull(classOf[SourceLocation]), notNull(classOf[EntryMessage]), eqv(3))
+
     assertResult(3)(result)
+    assertResult(2)(testLogger.entries.size)
+
+    val enter = testLogger.entries(0)
+    assertResult(Level.TRACE)(enter._2)
+    assertResult("ENTER")(enter._3.getName)
+    assertResult(1)(enter._3.getParents.size)
+    assertResult("FLOW")(enter._3.getParents.head.getName)
+    assertResult(null)(enter._3.getParents.head.getParents)
+    assertResult("Enter")(enter._4.getFormat)
+    assertResult("Enter")(enter._4.getFormattedMessage)
+    assertResult(null)(enter._4.getParameters)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assertResult(null)(enter._4.getThrowable)
+    assertResult(null)(enter._5)
+
+    val exit = testLogger.entries(1)
+    assertResult(Level.TRACE)(exit._2)
+    assertResult("EXIT")(exit._3.getName)
+    assertResult(1)(exit._3.getParents.size)
+    assertResult("FLOW")(exit._3.getParents.head.getName)
+    assertResult(null)(exit._3.getParents.head.getParents)
+    assertResult("Exit")(exit._4.getFormat)
+    assertResult("Exit: 3")(exit._4.getFormattedMessage)
+    assertResult(null)(exit._4.getParameters)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assert(exit._4.getThrowable == null)
+    assertResult(null)(exit._5)
   }
 
   test("traced with exception") {
-    def f = fixture
-    val logger = Logger(f.mockLogger)
-    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null: String)).thenReturn(true)
-    when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.THROWING_MARKER, null: Any, null)).thenReturn(true)
-    def example(): Unit = logger.traced(Level.INFO)(throw new Exception())
+    val testLogger = new TestLogger
+    val logger = Logger(testLogger)
+    def example(): Unit = logger.traced(Level.INFO)(throw new Exception("message"))
+
     intercept[Exception](example())
-    verify(f.mockLogger).traceEntry(notNull(classOf[SourceLocation]), eqv(null: String))
-    verify(f.mockLogger).catching(notNull(classOf[SourceLocation]), notNull(classOf[Exception]))
+    assertResult(2)(testLogger.entries.size)
+
+    val enter = testLogger.entries(0)
+    assertResult(Level.TRACE)(enter._2)
+    assertResult("ENTER")(enter._3.getName)
+    assertResult(1)(enter._3.getParents.size)
+    assertResult("FLOW")(enter._3.getParents.head.getName)
+    assertResult(null)(enter._3.getParents.head.getParents)
+    assertResult("Enter")(enter._4.getFormat)
+    assertResult("Enter")(enter._4.getFormattedMessage)
+    assertResult(null)(enter._4.getParameters)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assertResult(null)(enter._4.getThrowable)
+    assertResult(null)(enter._5)
+
+    val threw = testLogger.entries(1)
+    assertResult(Level.INFO)(threw._2)
+    assertResult("THROWING")(threw._3.getName)
+    assertResult(1)(threw._3.getParents.size)
+    assertResult("EXCEPTION")(threw._3.getParents.head.getName)
+    assertResult(null)(threw._3.getParents.head.getParents)
+    assertResult("Throwing")(threw._4.getFormat)
+    assertResult("Throwing")(threw._4.getFormattedMessage)
+    assertResult(0)(threw._4.getParameters.size)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assertResult(null)(threw._4.getThrowable)
+    assert(threw._5.isInstanceOf[Exception])
+    assertResult("message")(threw._5.getMessage)
   }
 
 }

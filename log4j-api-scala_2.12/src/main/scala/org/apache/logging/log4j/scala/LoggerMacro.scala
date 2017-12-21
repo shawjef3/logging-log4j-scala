@@ -48,9 +48,8 @@ private object LoggerMacro {
     c.universe.reify {
       val location = getSourceLocation(c).splice
       val entry = c.prefix.splice.delegate.traceEntry(location, null: String)
-      try {
-        c.prefix.splice.delegate.traceExit(location, entry, f.splice)
-      } catch {
+      try c.prefix.splice.delegate.traceExit(location, entry, f.splice)
+      catch {
         case scala.util.control.NonFatal(e) =>
           c.prefix.splice.delegate.throwing(location, level.splice, e)
           throw e
