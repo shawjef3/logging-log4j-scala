@@ -64,6 +64,16 @@ object Logger {
 class Logger private(val delegate: ExtendedLogger) extends AnyVal {
 
   /**
+    * Wrap your method body with [[traced]] to call [[traceEntry]] before executing `f`, and
+    * [[traceExit]] after execution completes. If `f` throws an exception, it is logged with
+    * [[throwing]] and the given log level. The implementation does not pass arguments to
+    * [[traceEntry]].
+    *
+    * {{{
+    *   def example(): Int = logger.traced(Level.ERROR) {
+    *     3
+    *   }
+    * }}}
     *
     * @param level is the level used to log exceptions
     * @param f is the method body to trace
