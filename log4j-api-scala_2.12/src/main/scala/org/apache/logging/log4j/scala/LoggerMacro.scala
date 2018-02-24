@@ -37,7 +37,7 @@ private object LoggerMacro {
     import c.universe._
 
     val className = c.Expr(Literal(Constant(term.owner.fullName)))
-    val methodName = c.Expr(Literal(Constant(if (term.isMethod) term.asMethod.name.decodedName.toString else "null")))
+    val methodName = c.Expr(Literal(Constant(if (term.isMethod) term.asMethod.name.decodedName.toString else "<null>")))
     val fileName = c.Expr(Literal(Constant(c.enclosingPosition.pos.source.file.name)))
     val line = c.Expr(Literal(Constant(c.enclosingPosition.line)))
     c.universe.reify(new StackTraceElement(className.splice, methodName.splice, fileName.splice, line.splice))
