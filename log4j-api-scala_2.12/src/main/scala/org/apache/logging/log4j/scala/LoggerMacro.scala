@@ -19,7 +19,6 @@ package org.apache.logging.log4j.scala
 import org.apache.logging.log4j.message.{EntryMessage, Message}
 import org.apache.logging.log4j.spi.AbstractLogger
 import org.apache.logging.log4j.{Level, Marker}
-
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 
@@ -30,6 +29,33 @@ private object LoggerMacro {
 
   type LoggerContext = blackbox.Context { type PrefixType = Logger }
 
+  def getStackTraceElement(c: LoggerContext): c.Expr[StackTraceElement] = {
+    val term = c.internal.enclosingOwner.asTerm match {
+      case t if t.owner.isMethod => t.owner
+      case t => t
+    }
+    import c.universe._
+
+    val className = c.Expr(Literal(Constant(term.owner.fullName)))
+    val methodName = c.Expr(Literal(Constant(if (term.isMethod) term.asMethod.name.decodedName.toString else "<null>")))
+    val fileName = c.Expr(Literal(Constant(c.enclosingPosition.pos.source.file.name)))
+    val line = c.Expr(Literal(Constant(c.enclosingPosition.line)))
+    c.universe.reify(new StackTraceElement(className.splice, methodName.splice, fileName.splice, line.splice))
+  }
+
+  def traced[A](c: LoggerContext)(level: c.Expr[Level])(f: c.Expr[A]) = {
+    //TODO: log params
+    c.universe.reify {
+      val location = getStackTraceElement(c).splice
+      val entry = c.prefix.splice.delegate.traceEntry(location, null: String)
+      try c.prefix.splice.delegate.traceExit(location, entry, f.splice)
+      catch {
+        case scala.util.control.NonFatal(e) =>
+          c.prefix.splice.delegate.throwing(location, level.splice, e)
+          throw e
+      }
+    }
+  }
 
   def fatalMarkerMsg(c: LoggerContext)(marker: c.Expr[Marker], message: c.Expr[Message]) =
     logMarkerMsg(c)(c.universe.reify(Level.FATAL), marker, message)
@@ -263,14 +289,14 @@ private object LoggerMacro {
   def logMarkerCseq(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[CharSequence]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getStackTraceElement(c).splice, null)
       }
     )
 
   def logMarkerObject(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[AnyRef]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getStackTraceElement(c).splice, null)
       }
     )
 
@@ -284,14 +310,14 @@ private object LoggerMacro {
   def logMarkerCseqThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[CharSequence], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getStackTraceElement(c).splice, cause.splice)
       }
     )
 
   def logMarkerObjectThrowable(c: LoggerContext)(level: c.Expr[Level], marker: c.Expr[Marker], message: c.Expr[AnyRef], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice, marker.splice)) {
-        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, marker.splice, message.splice, getStackTraceElement(c).splice, cause.splice)
       }
     )
 
@@ -305,14 +331,14 @@ private object LoggerMacro {
   def logCseq(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getStackTraceElement(c).splice, null)
       }
     )
 
   def logObject(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[AnyRef]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, null)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getStackTraceElement(c).splice, null)
       }
     )
 
@@ -326,21 +352,21 @@ private object LoggerMacro {
   def logCseqThrowable(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[CharSequence], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getStackTraceElement(c).splice, cause.splice)
       }
     )
 
   def logObjectThrowable(c: LoggerContext)(level: c.Expr[Level], message: c.Expr[AnyRef], cause: c.Expr[Throwable]) =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(level.splice)) {
-        c.prefix.splice.logMessage(level.splice, null, message.splice, cause.splice)
+        c.prefix.splice.logMessage(level.splice, null, message.splice, getStackTraceElement(c).splice, cause.splice)
       }
     )
 
 
   def traceEntry(c: LoggerContext)(): c.Expr[EntryMessage] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceEntry()
+      c.prefix.splice.delegate.traceEntry(getStackTraceElement(c).splice)
     )
 
   def traceEntryParams(c: LoggerContext)(params: c.Expr[AnyRef]*): c.Expr[EntryMessage] = {
@@ -355,9 +381,10 @@ private object LoggerMacro {
       )
     )
 
+
     val log = Apply(
       Select(Select(c.prefix.tree, TermName("delegate")), TermName("traceEntry")),
-      reify(null: String).tree :: (params map (_.tree)).toList
+      getStackTraceElement(c).tree :: reify(null: String).tree :: (params map (_.tree)).toList
     )
     c.Expr[EntryMessage](If(isEnabled, log, reify(null).tree))
   }
@@ -366,7 +393,7 @@ private object LoggerMacro {
   def traceEntryMessage(c: LoggerContext)(message: c.Expr[Message]): c.Expr[EntryMessage] =
     c.universe.reify(
       if (c.prefix.splice.delegate.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null: AnyRef, null)) {
-        c.prefix.splice.delegate.traceEntry(message.splice)  // TODO should not do ifEnabled check
+        c.prefix.splice.delegate.traceEntry(getStackTraceElement(c).splice, message.splice)  // TODO should not do ifEnabled check
       } else {
         null
       }
@@ -374,29 +401,29 @@ private object LoggerMacro {
 
   def traceExit(c: LoggerContext)(): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit()
+      c.prefix.splice.delegate.traceExit(getStackTraceElement(c).splice)
     )
 
   def traceExitResult[R: c.WeakTypeTag](c: LoggerContext)(result: c.Expr[R]): c.Expr[R] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit(result.splice)
+      c.prefix.splice.delegate.traceExit(getStackTraceElement(c).splice, result.splice)
     )
 
   def traceExitEntryMessage(c: LoggerContext)(entryMessage: c.Expr[EntryMessage]): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit(entryMessage.splice)
+      c.prefix.splice.delegate.traceExit(getStackTraceElement(c).splice, entryMessage.splice)
     )
 
   def traceExitEntryMessageResult[R: c.WeakTypeTag](c: LoggerContext)(entryMessage: c.Expr[EntryMessage], result: c.Expr[R]): c.Expr[R] =
     c.universe.reify(
-      c.prefix.splice.delegate.traceExit(entryMessage.splice, result.splice)
+      c.prefix.splice.delegate.traceExit(getStackTraceElement(c).splice, entryMessage.splice, result.splice)
     )
 
   def traceExitMessageResult[R: c.WeakTypeTag](c: LoggerContext)(message: c.Expr[Message], result: c.Expr[R]): c.Expr[R] =
     c.universe.reify(
       {
         if (message.splice != null && c.prefix.splice.delegate.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, message.splice, null)) {
-          c.prefix.splice.delegate.traceExit(message.splice, result.splice)  // TODO should not do ifEnabled check
+          c.prefix.splice.delegate.traceExit(getStackTraceElement(c).splice, message.splice, result.splice)  // TODO should not do ifEnabled check
         }
         result.splice
       }
@@ -404,22 +431,22 @@ private object LoggerMacro {
 
   def throwing[T <: Throwable: c.WeakTypeTag](c: LoggerContext)(t: c.Expr[T]): c.Expr[T] =
     c.universe.reify(
-      c.prefix.splice.delegate.throwing(t.splice)
+      c.prefix.splice.delegate.throwing(getStackTraceElement(c).splice, t.splice)
     )
 
   def throwingLevel[T <: Throwable: c.WeakTypeTag](c: LoggerContext)(level: c.Expr[Level], t: c.Expr[T]): c.Expr[T] =
     c.universe.reify(
-      c.prefix.splice.delegate.throwing(level.splice, t.splice)
+      c.prefix.splice.delegate.throwing(getStackTraceElement(c).splice, level.splice, t.splice)
     )
 
   def catching(c: LoggerContext)(t: c.Expr[Throwable]): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.catching(t.splice)
+      c.prefix.splice.delegate.catching(getStackTraceElement(c).splice, t.splice)
     )
 
   def catchingLevel(c: LoggerContext)(level: c.Expr[Level], t: c.Expr[Throwable]): c.Expr[Unit] =
     c.universe.reify(
-      c.prefix.splice.delegate.catching(level.splice, t.splice)
+      c.prefix.splice.delegate.catching(getStackTraceElement(c).splice, level.splice, t.splice)
     )
 
 }

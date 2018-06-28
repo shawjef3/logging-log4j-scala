@@ -16,16 +16,17 @@
  */
 package org.apache.logging.log4j.scala
 
-import org.apache.logging.log4j.message.{DefaultFlowMessageFactory, Message, ParameterizedMessage, ParameterizedMessageFactory}
+import java.util.Objects
+import org.apache.logging.log4j.message._
 import org.apache.logging.log4j.spi.{AbstractLogger, ExtendedLogger}
-import org.apache.logging.log4j.{Level, Marker, MarkerManager}
+import org.apache.logging.log4j.{Level, LogManager, Marker, MarkerManager}
+import org.hamcrest.{BaseMatcher, Description}
 import org.junit.runner.RunWith
-import org.mockito.Matchers.{any, anyString, eq => eqv}
+import org.mockito.Matchers.{any, anyString, argThat, isNull, notNull, eq => eqv}
 import org.mockito.Mockito._
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{FunSuite, Matchers}
-
 import scala.language.reflectiveCalls  // needed for Mockito mocking
 
 case class Custom(i: Int)
@@ -58,6 +59,27 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
         mockManager
       }
     }
+
+  def messageMatcher: Message =
+    argThat(
+      new BaseMatcher[Message] {
+        override def matches(item: scala.Any): Boolean = {
+          item match {
+            case otherMessage: Message
+              if Objects.equals(msg.getFormat, otherMessage.getFormat) &&
+                Objects.equals(msg.getParameters, otherMessage.getParameters) &&
+                Objects.equals(msg.getThrowable, otherMessage.getThrowable) &&
+                otherMessage.getSource != null =>
+              true
+            case _ =>
+              false
+          }
+        }
+
+        override def describeTo(description: Description): Unit =
+          description.appendText(msg.toString)
+      }
+    )
 
   test("fatal enabled with String message") {
     val f = fixture
@@ -438,7 +460,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceEntry()
-    verify(f.mockLogger).traceEntry()
+    verify(f.mockLogger).traceEntry(notNull(classOf[StackTraceElement]))
   }
 
   test("traceEntry enabled with params") {
@@ -446,7 +468,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceEntry("foo", "bar")
-    verify(f.mockLogger).traceEntry(null: String, "foo", "bar")
+    verify(f.mockLogger).traceEntry(notNull(classOf[StackTraceElement]), isNull(classOf[String]), eqv("foo"), eqv("bar"))
   }
 
   test("traceEntry disabled with params") {
@@ -454,7 +476,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(false)
     val logger = Logger(f.mockLogger)
     logger.traceEntry("foo", "bar")
-    verify(f.mockLogger, never).traceEntry(anyString(), anyString(), anyString())
+    verify(f.mockLogger, never).traceEntry(notNull(classOf[StackTraceElement]), isNull(classOf[String]), eqv("foo"), eqv("bar"))
   }
 
   test("traceEntry enabled with message") {
@@ -462,7 +484,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceEntry(msg)
-    verify(f.mockLogger).traceEntry(eqv(msg))
+    verify(f.mockLogger).traceEntry(notNull(classOf[StackTraceElement]), eqv(msg))
   }
 
   test("traceEntry disabled with message") {
@@ -470,7 +492,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.ENTRY_MARKER, null.asInstanceOf[AnyRef], null)).thenReturn(false)
     val logger = Logger(f.mockLogger)
     logger.traceEntry(msg)
-    verify(f.mockLogger, never).traceEntry(any[Message])
+    verify(f.mockLogger, never).traceEntry(notNull(classOf[StackTraceElement]), eqv(msg))
   }
 
   test("traceExit") {
@@ -478,7 +500,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit()
-    verify(f.mockLogger).traceExit()
+    verify(f.mockLogger).traceExit(notNull(classOf[StackTraceElement]))
   }
 
   test("traceExit with result") {
@@ -486,7 +508,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(result)
-    verify(f.mockLogger).traceExit(result)
+    verify(f.mockLogger).traceExit(notNull(classOf[StackTraceElement]), eqv(result))
   }
 
   test("traceExit with entrymessage") {
@@ -494,7 +516,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(entryMsg)
-    verify(f.mockLogger).traceExit(entryMsg)
+    verify(f.mockLogger).traceExit(notNull(classOf[StackTraceElement]), eqv(entryMsg))
   }
 
   test("traceExit with entrymessage and result") {
@@ -502,7 +524,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(entryMsg, result)
-    verify(f.mockLogger).traceExit(entryMsg, result)
+    verify(f.mockLogger).traceExit(notNull(classOf[StackTraceElement]), eqv(entryMsg), eqv(result))
   }
 
   test("traceExit enabled with message") {
@@ -510,7 +532,7 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(true)
     val logger = Logger(f.mockLogger)
     logger.traceExit(msg, result)
-    verify(f.mockLogger).traceExit(eqv(msg), eqv(result))
+    verify(f.mockLogger).traceExit(notNull(classOf[StackTraceElement]), eqv(msg), eqv(result))
   }
 
   test("traceExit disabled with message") {
@@ -518,35 +540,119 @@ class LoggerTest extends FunSuite with Matchers with MockitoSugar {
     when(f.mockLogger.isEnabled(Level.TRACE, AbstractLogger.EXIT_MARKER, msg, null)).thenReturn(false)
     val logger = Logger(f.mockLogger)
     logger.traceExit(msg, result)
-    verify(f.mockLogger, never).traceExit(any[Message], any[AnyRef])
+    verify(f.mockLogger, never).traceExit(notNull(classOf[StackTraceElement]), eqv(msg), eqv(result))
   }
 
   test("throwing") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.throwing(cause)
-    verify(f.mockLogger).throwing(eqv(cause))
+    verify(f.mockLogger).throwing(notNull(classOf[StackTraceElement]), eqv(cause))
   }
 
   test("throwing with level") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.throwing(Level.INFO, cause)
-    verify(f.mockLogger).throwing(eqv(Level.INFO), eqv(cause))
+    verify(f.mockLogger).throwing(notNull(classOf[StackTraceElement]), eqv(Level.INFO), eqv(cause))
   }
 
   test("catching") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.catching(cause)
-    verify(f.mockLogger).catching(eqv(cause))
+    verify(f.mockLogger).catching(notNull(classOf[StackTraceElement]), eqv(cause))
   }
 
   test("catching with level") {
     val f = fixture
     val logger = Logger(f.mockLogger)
     logger.catching(Level.INFO, cause)
-    verify(f.mockLogger).catching(eqv(Level.INFO), eqv(cause))
+    verify(f.mockLogger).catching(notNull(classOf[StackTraceElement]), eqv(Level.INFO), eqv(cause))
+  }
+
+  test("traced without exception") {
+    val testLogger = new TestLogger
+    val logger = Logger(testLogger)
+    def example(): Int = logger.traced(Level.INFO)(3)
+    val result = example()
+
+    assertResult(3)(result)
+    assertResult(2)(testLogger.entries.size)
+
+    val enter = testLogger.entries(0)
+    assertResult(Level.TRACE)(enter._2)
+    assertResult("ENTER")(enter._3.getName)
+    assertResult(1)(enter._3.getParents.size)
+    assertResult("FLOW")(enter._3.getParents.head.getName)
+    assertResult(null)(enter._3.getParents.head.getParents)
+    assertResult("Enter")(enter._4.getFormat)
+    assertResult("Enter")(enter._4.getFormattedMessage)
+    assertResult(null)(enter._4.getParameters)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assertResult(null)(enter._4.getThrowable)
+    assertResult(null)(enter._5)
+
+    val exit = testLogger.entries(1)
+    assertResult(Level.TRACE)(exit._2)
+    assertResult("EXIT")(exit._3.getName)
+    assertResult(1)(exit._3.getParents.size)
+    assertResult("FLOW")(exit._3.getParents.head.getName)
+    assertResult(null)(exit._3.getParents.head.getParents)
+    assertResult("Exit")(exit._4.getFormat)
+    assertResult("Exit: 3")(exit._4.getFormattedMessage)
+    assertResult(null)(exit._4.getParameters)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assert(exit._4.getThrowable == null)
+    assertResult(null)(exit._5)
+  }
+
+  test("traced with exception") {
+    val testLogger = new TestLogger
+    val logger = Logger(testLogger)
+    def example(): Unit = logger.traced(Level.INFO)(throw new Exception("message"))
+
+    intercept[Exception](example())
+    assertResult(2)(testLogger.entries.size)
+
+    val enter = testLogger.entries(0)
+    assertResult(Level.TRACE)(enter._2)
+    assertResult("ENTER")(enter._3.getName)
+    assertResult(1)(enter._3.getParents.size)
+    assertResult("FLOW")(enter._3.getParents.head.getName)
+    assertResult(null)(enter._3.getParents.head.getParents)
+    assertResult("Enter")(enter._4.getFormat)
+    assertResult("Enter")(enter._4.getFormattedMessage)
+    assertResult(null)(enter._4.getParameters)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assertResult(null)(enter._4.getThrowable)
+    assertResult(null)(enter._5)
+
+    val threw = testLogger.entries(1)
+    assertResult(Level.INFO)(threw._2)
+    assertResult("THROWING")(threw._3.getName)
+    assertResult(1)(threw._3.getParents.size)
+    assertResult("EXCEPTION")(threw._3.getParents.head.getName)
+    assertResult(null)(threw._3.getParents.head.getParents)
+    assertResult("Throwing")(threw._4.getFormat)
+    assertResult("Throwing")(threw._4.getFormattedMessage)
+    assertResult(0)(threw._4.getParameters.size)
+    assertResult("org.apache.logging.log4j.scala.LoggerTest.<local LoggerTest>")(enter._4.getSource.getClassName)
+    assertResult("LoggerTest.scala")(enter._4.getSource.getFileName)
+    assert(enter._4.getSource.getLineNumber > -1)
+    assertResult("example")(enter._4.getSource.getMethodName)
+    assertResult(null)(threw._4.getThrowable)
+    assert(threw._5.isInstanceOf[Exception])
+    assertResult("message")(threw._5.getMessage)
   }
 
 }

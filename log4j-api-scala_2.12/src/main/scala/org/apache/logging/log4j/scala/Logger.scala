@@ -19,7 +19,6 @@ package org.apache.logging.log4j.scala
 import org.apache.logging.log4j.message.{EntryMessage, Message, MessageFactory2}
 import org.apache.logging.log4j.spi.ExtendedLogger
 import org.apache.logging.log4j.{Level, LogManager, Marker}
-
 import scala.language.experimental.macros
 
 /**
@@ -63,6 +62,26 @@ object Logger {
   * will only occur when debug logging is enabled.
   */
 class Logger private(val delegate: ExtendedLogger) extends AnyVal {
+
+  /**
+    * Wrap your method body with [[traced]] to call [[traceEntry]] before executing `f`, and
+    * [[traceExit]] after execution completes. If `f` throws an exception, it is logged with
+    * [[throwing]] and the given log level. The implementation does not pass arguments to
+    * [[traceEntry]].
+    *
+    * {{{
+    *   def example(): Int = logger.traced(Level.ERROR) {
+    *     3
+    *   }
+    * }}}
+    *
+    * @param level is the level used to log exceptions
+    * @param f is the method body to trace
+    * @tparam A
+    * @return the value returned by `f`
+    */
+  def traced[A](level: Level)(f: => A): A =
+  macro LoggerMacro.traced[A]
 
   def fatal(marker: Marker, message: Message): Unit =
   macro LoggerMacro.fatalMarkerMsg
@@ -571,8 +590,8 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
     * @param message message
     * @param cause   cause or `null`
     */
-  def logMessage(level: Level, marker: Marker, message: CharSequence, cause: Throwable): Unit = {
-    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(message), cause)
+  def logMessage(level: Level, marker: Marker, message: CharSequence, location: StackTraceElement, cause: Throwable): Unit = {
+    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(location, message), cause)
   }
 
   /** Always logs a message at the specified level. It is the responsibility of the caller to ensure the specified
@@ -585,8 +604,8 @@ class Logger private(val delegate: ExtendedLogger) extends AnyVal {
     * @param message message
     * @param cause   cause or `null`
     */
-  def logMessage(level: Level, marker: Marker, message: AnyRef, cause: Throwable): Unit = {
-    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(message), cause)
+  def logMessage(level: Level, marker: Marker, message: AnyRef, location: StackTraceElement, cause: Throwable): Unit = {
+    delegate.logMessage(Logger.FQCN, level, marker, delegate.getMessageFactory.asInstanceOf[MessageFactory2].newMessage(location, message), cause)
   }
 
 }
